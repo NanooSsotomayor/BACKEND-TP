@@ -1,0 +1,239 @@
+version: '3.8'
+
+networks:
+  backend-network:
+    driver: bridge
+
+volumes:
+  keycloak_data:
+  mssql_data:
+
+services:
+  # 1. Servicio de SQL Server
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "YourStrongPassword123!"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - backend-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrongPassword123!' -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      retries: 10
+      start_period: 10s
+      timeout: 3s
+
+  # 2. Servicio "Init" (Crea la base de datos automáticamente)
+  mssql-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - backend-network
+    command: >
+      /bin/bash -c "
+      /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P 'YourStrongPassword123!' -C -Q 'IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = \"keycloak_db\") BEGIN CREATE DATABASE keycloak_db; END'
+      
+      /opt/mssql-tools18/bin/sqlcmd -S sqlserver -U sa -P 'YourStrongPassword123!' -C -Q 'IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = \"sistema_viajes_db\") BEGIN CREATE DATABASE sistema_viajes_db; END'
+      "
+
+  # 3. Servicio de KeyCloak
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: keycloak
+    ports:
+      - "8080:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+
+      # Configuración BD
+      KC_DB: mssql
+      KC_DB_URL: jdbc:sqlserver://sqlserver:1433;databaseName=keycloak_db;trustServerCertificate=true;
+      KC_DB_USERNAME: sa
+      KC_DB_PASSWORD: YourStrongPassword123!
+
+      KC_HOSTNAME: localhost
+      KC_HTTP_PORT: 8080
+      KC_PROXY: edge
+      KC_HEALTH_ENABLED: true
+      KC_FEATURES: token-exchange,admin-fine-grained-authz
+    command: start-dev --http-relative-path /auth --hostname-strict false
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+    networks:
+      - backend-network
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully
+
+  # 4. SERVICIO OSRM (Ruteo Rápido)
+  osrm:
+    image: osrm/osrm-backend:v5.22.0
+    container_name: osrm
+    # Comando para reprocesar y correr el servidor si los archivos binarios fallan.
+    command: sh -c "osrm-extract /data/uruguay-latest.osm.pbf -p /opt/car.lua && osrm-partition /data/uruguay-latest.osrm && osrm-customize /data/uruguay-latest.osrm && osrm-routed /data/uruguay-latest.osrm"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./osrm-data:/data
+    networks:
+      - backend-network
+    restart: unless-stopped
+
+  # -------------------------------------------
+  # 5. MICROSERVICIO TARIFAS (ms-tarifas)
+  # -------------------------------------------
+  ms-tarifas:
+    build:
+      context: ./microservicio-tarifas
+      dockerfile: Dockerfile
+    container_name: ms-tarifas
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_started
+    networks:
+      - backend-network
+
+  # -------------------------------------------
+  # 6. MICROSERVICIO INVENTARIO (ms-inventario)
+  # -------------------------------------------
+  ms-inventario:
+    build:
+      context: ./microservicio-inventario
+      dockerfile: Dockerfile
+    container_name: ms-inventario
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_started
+    networks:
+      - backend-network
+
+  # -------------------------------------------
+  # 7. MICROSERVICIO USUARIOS (ms-usuarios)
+  # -------------------------------------------
+  ms-usuarios:
+    build:
+      context: ./microservicio-usuarios
+      dockerfile: Dockerfile
+    container_name: ms-usuarios
+    ports:
+      - "8082:8082"
+    environment:
+      # CRÍTICO: Conexión a la BD (usando el nombre del servicio 'sqlserver')
+      SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_started
+    networks:
+      - backend-network
+
+  # -------------------------------------------
+  # 8. MICROSERVICIO VIAJES (ms-viajes)
+  # -------------------------------------------
+  ms-viajes:
+    build:
+      context: ./microservicio-viajes
+      dockerfile: Dockerfile
+    container_name: ms-viajes
+    ports:
+      - "8083:8083"
+    environment:
+      # CRÍTICO: Usar nombres de servicio para llamadas inter-MS
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      MICROSERVICES_TARIFAS_URL: http://ms-tarifas:8086/tarifas
+      OSRM_BASE-URL: http://osrm:5000
+    depends_on:
+      - keycloak
+      - ms-tarifas
+      - osrm # Aseguramos que OSRM inicie si está presente
+    networks:
+      - backend-network
+
+  # -------------------------------------------
+  # 9. MICROSERVICIO SOLICITUDES (ms-solicitudes)
+  # -------------------------------------------
+  ms-solicitudes:
+    build:
+      context: ./microservicio-solicitudes
+      dockerfile: Dockerfile
+    container_name: ms-solicitudes
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      # CRÍTICO: URLs de orquestación interna
+      MICROSERVICES_INVENTARIO_URL: http://ms-inventario:8085/contenedores
+      MICROSERVICES_USUARIOS_URL: http://ms-usuarios:8082/usuarios
+      MICROSERVICES_VIAJES_URL: http://ms-viajes:8083/rutas
+    depends_on:
+      # ✅ SINTAXIS CORREGIDA: Usando el formato de mapa para todas las dependencias
+      sqlserver:
+        condition: service_healthy
+      mssql-init:
+        condition: service_completed_successfully # Espera a que la BD se cree
+      keycloak:
+        condition: service_started # Espera a que la seguridad esté lista
+      ms-usuarios:
+        condition: service_started
+      ms-inventario:
+        condition: service_started
+      ms-viajes:
+        condition: service_started
+    networks:
+      - backend-network
+
+  # -------------------------------------------
+  # 10. API GATEWAY (ms-gateway)
+  # -------------------------------------------
+  ms-gateway:
+    build:
+      context: ./api-gateway # Construye a partir del Dockerfile local
+      dockerfile: Dockerfile
+    container_name: ms-gateway
+    ports:
+      - "8081:8081" # Puerto público para acceso externo
+    environment:
+      # Seguridad: Apunta a Keycloak por su nombre de servicio
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      SERVER_PORT: 8081
+    depends_on:
+      - keycloak
+      - ms-solicitudes # Aseguramos que los principales MS estén arriba
+      - ms-usuarios
+    networks:
+      - backend-network

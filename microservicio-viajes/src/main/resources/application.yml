@@ -1,0 +1,21 @@
+server:
+  port: 8083 # Puerto del servicio de Viajes
+
+spring:
+  # 1. CONFIGURACIÓN DE SEGURIDAD (Keycloak Resource Server)
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # ✅ CORRECCIÓN 1: Cambiamos 'localhost' por el nombre del servicio Keycloak
+          jwk-set-uri: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+
+# 2. CONFIGURACIÓN DE APIS Y ORQUESTACIÓN (Para RestTemplate)
+osrm:
+  # ✅ CORRECCIÓN 2: OSRM ya usaba el nombre del servicio 'osrm', lo cual es correcto.
+  base-url: http://osrm:5000
+
+microservices:
+  # ✅ CORRECCIÓN 3: El MS Tarifas ya usa el nombre de servicio 'ms-tarifas', lo cual es correcto.
+  tarifas:
+    url: http://ms-tarifas:8086/tarifas

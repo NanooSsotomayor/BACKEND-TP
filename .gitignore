@@ -1,0 +1,45 @@
+# Java/Maven
+target/
+**/target/
+*.jar
+*.war
+*.class
+
+# IDEs
+/.idea/
+*.iml
+.settings/
+.project
+.classpath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Data and build artifacts
+/osrm-data/
+/data/
+*.pbf
+*.osm.pbf
+
+# Docker
+docker-compose.override.yml
+.env
+
+# Logs
+*.log
+
+# Eclipse files
+.metadata/
+
+# macOS
+*.DS_Store
+
+# Gradle
+.gradle/
+
+# Optional: if you use Git LFS for large files, keep patterns here in .gitattributes instead
+

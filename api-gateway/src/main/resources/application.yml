@@ -1,0 +1,64 @@
+server:
+  port: 8081 # Puerto del API Gateway
+
+spring:
+  # 1. CONFIGURACIÓN DE SEGURIDAD
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # ✅ CORRECCIÓN DE HOSTNAME: Keycloak está en Docker, accesible por su nombre de servicio.
+          jwk-set-uri: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+
+  # 2. CONFIGURACIÓN DEL GATEWAY (RUTAS Y ENRUTAMIENTO)
+  cloud:
+    gateway:
+      routes:
+        # ⚠️ CRÍTICO: CAMBIAR localhost por el nombre del servicio (ej: ms-usuarios)
+
+        # RUTA PARA EL MS USUARIOS (ms-usuarios)
+        - id: users-service
+          uri: http://ms-usuarios:8082
+          predicates:
+            - Path=/usuarios/**
+          filters:
+            - TokenRelay=
+
+        # RUTA PARA EL MS VIAJES (ms-viajes)
+        - id: trips-service
+          uri: http://ms-viajes:8083
+          predicates:
+            - Path=/rutas/**
+          filters:
+            - TokenRelay=
+
+        # RUTA PARA EL MS SOLICITUDES (ms-solicitudes)
+        - id: requests-service
+          uri: http://ms-solicitudes:8084
+          predicates:
+            - Path=/solicitudes/**
+          filters:
+            - TokenRelay=
+
+        # RUTA PARA EL MS INVENTARIO (ms-inventario)
+        - id: inventory-service
+          uri: http://ms-inventario:8085
+          predicates:
+            - Path=/contenedores/**, /depositos/**, /camiones/**
+          filters:
+            - TokenRelay=
+
+        # RUTA PARA EL MS TARIFAS (ms-tarifas)
+        - id: rates-service
+          uri: http://ms-tarifas:8086
+          predicates:
+            - Path=/tarifas-base/**, /tarifas/**
+          filters:
+            - TokenRelay=
+
+# 3. LOGGING (Mantenemos el debug)
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: DEBUG
+    org.springframework.cloud.gateway: INFO
