@@ -1,5 +1,6 @@
 com\proyectoviajes\viajems\dto\CalculoEstimadoResponse.class
 com\proyectoviajes\viajems\config\JwtAuthConverter.class
+com\proyectoviajes\viajems\dto\RutaSugeridaDTO.class
 com\proyectoviajes\viajems\service\TarifaService.class
 com\proyectoviajes\viajems\controller\RutaController.class
 com\proyectoviajes\viajems\service\CalculoService.class
