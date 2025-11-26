@@ -1,0 +1,4 @@
+com\proyectoviajes\apigateway\ApiGatewayApplication.class
+com\proyectoviajes\apigateway\config\SecurityConfig.class
+com\proyectoviajes\apigateway\config\JwtAuthConverter.class
+com\proyectoviajes\apigateway\config\ReactiveJwtAuthConverter.class

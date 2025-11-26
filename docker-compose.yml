@@ -103,8 +103,9 @@ services:
     ports:
       - "8086:8086"
     environment:
-      SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      - SPRING_DATASOURCE_URL=jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false
+      # 🔥 ESTA ES LA LÍNEA QUE HACE QUE FUNCIONE SÍ O SÍ:
+      - "JAVA_TOOL_OPTIONS=-Dspring.security.oauth2.resourceserver.jwt.jwk-set-uri=http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs"
     depends_on:
       sqlserver:
         condition: service_healthy

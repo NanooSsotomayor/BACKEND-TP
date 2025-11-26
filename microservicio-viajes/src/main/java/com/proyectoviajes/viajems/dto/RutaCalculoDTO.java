@@ -1,14 +1,11 @@
 package com.proyectoviajes.viajems.dto;
-
 import lombok.Data;
 import java.util.List;
 
 @Data
 public class RutaCalculoDTO {
-    // Lista de pares [latitud, longitud] que definen la ruta (origen, depósitos, destino).
     private List<double[]> puntosRuta;
-
-    // Peso y volumen del contenedor, necesario para validar camiones y calcular tarifas.
-    private Double pesoContenedorKg;
-    private Double volumenContenedorM3;
+    // Estos nombres deben coincidir con lo que envía ms-solicitudes
+    private Double pesoKg;     // En solicitudes se llama pesoKg
+    private Double volumenM3;  // En solicitudes se llama volumenM3
 }

@@ -2,6 +2,7 @@ package com.proyectoviajes.tarifams.service;
 
 import com.proyectoviajes.tarifams.dto.CostoEstimadoRequest;
 import com.proyectoviajes.tarifams.dto.CostoEstimadoResponse;
+import com.proyectoviajes.tarifams.model.TarifaBase;
 import com.proyectoviajes.tarifams.repository.TarifaBaseRepository;
 import org.springframework.stereotype.Service;
 
@@ -9,7 +10,9 @@ import org.springframework.stereotype.Service;
 public class TarifaService {
 
     private final TarifaBaseRepository tarifaBaseRepository;
-    private static final Double CARGO_FIJO_GESTION = 500.0; // Valor de ejemplo
+
+    // Valor promedio de consumo para estimaciones (0.3 Litros por Km, es decir, 30L cada 100km)
+    private static final Double CONSUMO_PROMEDIO_GENERAL_LTS_KM = 0.3;
 
     public TarifaService(TarifaBaseRepository tarifaBaseRepository) {
         this.tarifaBaseRepository = tarifaBaseRepository;
@@ -17,27 +20,34 @@ public class TarifaService {
 
     public CostoEstimadoResponse calcularCostoEstimado(CostoEstimadoRequest request) {
 
-        // 1. OBTENER TARIFA BASE (Según volumen del contenedor)
-        // La entidad TarifaBase tiene el método findFirstByVolumen...
-        // Nota: Asumiremos por simplicidad que encontramos una tarifa.
-        Double costoKmBase = 10.0; // Simulamos la tarifa si no se encuentra en DB
-        Double costoLitroCombustible = 500.0; // Simulamos el valor del litro
+        Double volumen = request.getVolumenContenedorM3();
+        Double distancia = request.getDistanciaKm();
 
-        // 2. CALCULAR COSTO DE RECORRIDO BASE
-        Double costoRecorrido = request.getDistanciaKm() * costoKmBase;
+        // 1. Buscar la tarifa aplicable según el volumen
+        // Pasamos el volumen dos veces porque la query es: min <= vol AND max >= vol
+        TarifaBase tarifa = tarifaBaseRepository
+                .findFirstByVolumenMinimoM3LessThanEqualAndVolumenMaximoM3GreaterThanEqual(volumen, volumen)
+                .orElseThrow(() -> new RuntimeException("No se encontró tarifa base para el volumen: " + volumen));
 
-        // 3. CALCULAR COSTO DE COMBUSTIBLE (Usando consumo promedio general, según TPI)
-        // Nota: El consumo promedio del camión (ej: 0.2 L/Km) debería venir de MS Inventario/Camiones.
-        Double consumoPromedioLts = 0.2; // 200 ml por Km (ejemplo)
-        Double costoCombustible = request.getDistanciaKm() * consumoPromedioLts * costoLitroCombustible;
+        // 2. Calcular Costo Base por Km (depende del volumen según la tarifa hallada)
+        // Fórmula: Distancia * CostoKmBase
+        Double costoRecorrido = distancia * tarifa.getCostoKmBase();
 
-        // 4. CALCULAR CARGOS DE GESTIÓN (Asumiendo 1 tramo)
-        Double cargosGestion = CARGO_FIJO_GESTION * 1.0;
+        // 3. Calcular Costo de Combustible Estimado
+        // Fórmula: (ConsumoPromedio * PrecioLitro) * Distancia
+        Double costoCombustible = (CONSUMO_PROMEDIO_GENERAL_LTS_KM * tarifa.getCostoLitroCombustible()) * distancia;
 
+        // 4. Cargos de Gestión
+        // Se cobra un cargo fijo por tramo (asumimos 1 tramo para la estimación global)
+        Double cargosGestion = tarifa.getCargoGestionTramo();
+
+        // 5. Suma Total
         Double costoTotal = costoRecorrido + costoCombustible + cargosGestion;
 
+        // Retornar respuesta
         CostoEstimadoResponse response = new CostoEstimadoResponse();
         response.setCostoTotalEstimado(costoTotal);
+
         return response;
     }
 }

@@ -5,6 +5,6 @@ import lombok.Data;
 @Data
 public class CalculoEstimadoResponse {
     private Double distanciaTotalKm;
-    private Long tiempoEstimadoHoras;
+    private Double tiempoEstimadoHoras;
     private Double costoEstimado;
 }

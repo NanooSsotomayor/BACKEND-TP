@@ -1,0 +1,14 @@
+com\proyectoviajes\inventarioms\controller\CamionController.class
+com\proyectoviajes\inventarioms\config\SecurityConfig.class
+com\proyectoviajes\inventarioms\repository\CamionRepository.class
+com\proyectoviajes\inventarioms\repository\ContenedorRepository.class
+com\proyectoviajes\inventarioms\model\Deposito.class
+com\proyectoviajes\inventarioms\InventarioMsApplication.class
+com\proyectoviajes\inventarioms\service\ContenedorService.class
+com\proyectoviajes\inventarioms\model\Contenedor.class
+com\proyectoviajes\inventarioms\config\JwtAuthConverter.class
+com\proyectoviajes\inventarioms\service\ValidacionInventarioService.class
+com\proyectoviajes\inventarioms\controller\DepositoController.class
+com\proyectoviajes\inventarioms\controller\ContenedorController.class
+com\proyectoviajes\inventarioms\model\Camion.class
+com\proyectoviajes\inventarioms\repository\DepositoRepository.class

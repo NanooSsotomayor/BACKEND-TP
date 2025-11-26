@@ -1,0 +1,28 @@
+# 1. CONFIGURACIÓN DEL SERVIDOR
+server:
+  port: 8085 # Puerto específico para el Microservicio de Inventario
+
+spring:
+  # 2. CONFIGURACIÓN DEL DATASOURCE (SQL Server)
+  datasource:
+    url: jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false;trustServerCertificate=false
+    username: SA
+    password: YourStrongPassword123! # Debe coincidir con SA_PASSWORD de Docker Compose
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+
+  # 3. CONFIGURACIÓN DE JPA/HIBERNATE
+  jpa:
+    hibernate:
+      ddl-auto: update # Útil en desarrollo para crear/actualizar tablas
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.SQLServerDialect
+
+  # 4. CONFIGURACIÓN DE SEGURIDAD (Keycloak Resource Server)
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # URI que usa Spring Security para obtener las claves de Keycloak y validar el token.
+          jwk-set-uri: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs

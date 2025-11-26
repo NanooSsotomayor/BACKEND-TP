@@ -1,0 +1,10 @@
+com\proyectoviajes\tarifams\dto\CostoEstimadoResponse.class
+com\proyectoviajes\tarifams\TarifasMsApplication.class
+com\proyectoviajes\tarifams\config\SecurityConfig.class
+com\proyectoviajes\tarifams\controller\TarifaController.class
+com\proyectoviajes\tarifams\model\TarifaBase.class
+com\proyectoviajes\tarifams\dto\CostoEstimadoRequest.class
+com\proyectoviajes\tarifams\config\JwtAuthConverter.class
+com\proyectoviajes\tarifams\controller\TarifaBaseController.class
+com\proyectoviajes\tarifams\service\TarifaService.class
+com\proyectoviajes\tarifams\repository\TarifaBaseRepository.class

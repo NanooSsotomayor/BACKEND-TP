@@ -2,20 +2,13 @@ package com.proyectoviajes.solicitudms.repository;
 
 import com.proyectoviajes.solicitudms.model.Solicitud;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-
 import java.util.List;
 
-@Repository
 public interface SolicitudRepository extends JpaRepository<Solicitud, Long> {
 
-    // Spring Data JPA provee los métodos CRUD básicos (save, findById, findAll, etc.).
-
     /**
-     * Requisito Funcional: Consultar el estado del transporte de un contenedor (Cliente).
-     * Este metodo es crucial para que un cliente pueda ver sus propias solicitudes.
-     * @param clienteKeycloakId El ID del cliente (extraído del token JWT)
-     * @return Lista de solicitudes asociadas a ese cliente.
+     * Metodo de búsqueda para el seguimiento.
+     * Busca todas las Solicitudes cuyo campo 'clienteKeycloakId' coincida con el parámetro.
      */
     List<Solicitud> findByClienteKeycloakId(String clienteKeycloakId);
 }

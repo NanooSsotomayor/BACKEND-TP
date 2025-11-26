@@ -1,0 +1,64 @@
+# Perfil local: usa `localhost` para enrutar a microservicios que corren como jars en la máquina
+server:
+  port: 8081
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Si Keycloak corre en tu host (no en Docker), usar localhost; si Keycloak corre en Docker y el gateway también,
+          # deja el valor en application.yml (keycloak).
+          jwk-set-uri: http://localhost:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+
+  cloud:
+    gateway:
+      routes:
+        - id: users-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/usuarios/**
+          filters:
+            - TokenRelay=
+
+        - id: trips-service
+          uri: http://localhost:8083
+          predicates:
+            - Path=/rutas/**
+          filters:
+            - TokenRelay=
+
+        - id: requests-service
+          uri: http://localhost:8084
+          predicates:
+            - Path=/solicitudes, /solicitudes/**
+          filters:
+            - TokenRelay=
+
+        - id: inventory-service
+          uri: http://localhost:8085
+          predicates:
+            - Path=/contenedores/**
+            - Path=/depositos/**
+            - Path=/camiones/**
+          filters:
+            - TokenRelay=
+
+        - id: rates-service
+          uri: http://localhost:8086
+          predicates:
+            - Path=/tarifas-base/**
+            - Path=/tarifas/**
+          filters:
+            - TokenRelay=
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    org.springframework.security.oauth2: DEBUG
+    org.springframework.cloud.gateway: INFO
+
+# Uso:
+# - Para arrancar el API Gateway en modo local apuntando a servicios en localhost:
+#   java -jar target/api-gateway-0.0.1-SNAPSHOT.jar --spring.profiles.active=local
+# - Alternativamente, exporta la variable de entorno SPRING_PROFILES_ACTIVE=local antes de arrancar.

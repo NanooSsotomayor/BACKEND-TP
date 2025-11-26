@@ -4,24 +4,27 @@ import com.proyectoviajes.solicitudms.dto.ContenedorDTO;
 import com.proyectoviajes.solicitudms.dto.SolicitudRequest;
 import com.proyectoviajes.solicitudms.model.Solicitud;
 import com.proyectoviajes.solicitudms.repository.SolicitudRepository;
-
 import com.proyectoviajes.solicitudms.dto.CalculoEstimadoResponse;
 import com.proyectoviajes.solicitudms.dto.RutaCalculoDTO;
 import com.proyectoviajes.solicitudms.dto.ClienteDTO;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class SolicitudService {
@@ -31,7 +34,6 @@ public class SolicitudService {
     private final SolicitudRepository solicitudRepository;
     private final RestTemplate internalRestTemplate;
 
-    // URLs inyectadas desde application.yml
     @Value("${microservices.inventario.url}")
     private String inventarioServiceUrl;
     @Value("${microservices.usuarios.url}")
@@ -44,151 +46,149 @@ public class SolicitudService {
         this.internalRestTemplate = internalRestTemplate;
     }
 
+    /**
+     * Paso 1: Registrar solicitud en estado BORRADOR.
+     * Lo ejecuta el CLIENTE.
+     */
+    @Transactional
     public Solicitud registrarNuevaSolicitud(SolicitudRequest request, String clienteKeycloakId, String token) {
 
-        logger.debug("Iniciando registro de solicitud para clienteKeycloakId={}", clienteKeycloakId);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // Nota: Las cabeceras (headers) de seguridad se adjuntan automáticamente
-        // a través del TokenRelayInterceptor configurado en RestTemplate.
-
-        // ---------------------------------------------------------
-        // 1. LLAMADA A MS USUARIOS (Validar/Crear Cliente)
-        // ---------------------------------------------------------
+        // 1. Validar o Registrar Cliente en MS-USUARIOS
         ClienteDTO clienteDto = new ClienteDTO();
-        clienteDto.setKeycloakId(clienteKeycloakId);
-        clienteDto.setNombre(request.getClienteNombre());
-        clienteDto.setEmail(request.getClienteEmail());
-        clienteDto.setTelefono(request.getClienteTelefono());
-
-        // Usamos exchange con HttpEntity para enviar el cuerpo y usar el Interceptor
-        HttpEntity<ClienteDTO> entityUsuario = new HttpEntity<>(clienteDto);
+        // Aquí deberías mapear los datos del request al DTO de cliente si es necesario
+        clienteDto.setEmail(request.getClienteEmail()); // Ejemplo
+        HttpEntity<ClienteDTO> entityUsuario = new HttpEntity<>(clienteDto, headers);
 
         try {
-            logger.debug("Llamando a MS Usuarios: {}", usuariosServiceUrl + "/validar-o-registrar");
             internalRestTemplate.exchange(
                     usuariosServiceUrl + "/validar-o-registrar",
                     HttpMethod.POST,
                     entityUsuario,
                     Object.class
             );
-        } catch (HttpStatusCodeException e) {
-            logger.error("Error HTTP al llamar MS Usuarios: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw e;
         } catch (Exception e) {
-            logger.error("Fallo al llamar MS Usuarios: {}", e.getMessage(), e);
-            throw new IllegalStateException("No se pudo validar/registrar el cliente", e);
+            logger.error("Fallo al llamar MS Usuarios: {}", e.getMessage());
         }
 
-        // ---------------------------------------------------------
-        // 2. LLAMADA A MS INVENTARIO (Crear Contenedor)
-        // ---------------------------------------------------------
+        // 2. Crear Contenedor en MS-INVENTARIO (Estado: BORRADOR)
         ContenedorDTO contenedorRequest = new ContenedorDTO();
         contenedorRequest.setPesoKg(request.getPesoKg());
         contenedorRequest.setVolumenM3(request.getVolumenM3());
         contenedorRequest.setClienteKeycloakId(clienteKeycloakId);
-        contenedorRequest.setEstado("BORRADOR");
+        contenedorRequest.setEstado("BORRADOR"); // Nace como borrador
 
-        HttpEntity<ContenedorDTO> entityInventario = new HttpEntity<>(contenedorRequest);
+        HttpEntity<ContenedorDTO> entityInventario = new HttpEntity<>(contenedorRequest, headers);
+        ContenedorDTO contenedorPersistido;
 
-        ContenedorDTO contenedorPersistido = null;
         try {
-            logger.debug("Llamando a MS Inventario: {}", inventarioServiceUrl);
             contenedorPersistido = internalRestTemplate.exchange(
                     inventarioServiceUrl,
                     HttpMethod.POST,
                     entityInventario,
                     ContenedorDTO.class
             ).getBody();
-
-            if (contenedorPersistido == null) {
-                logger.error("MS Inventario devolvió body null al crear contenedor");
-                throw new IllegalStateException("Inventario no creó el contenedor");
-            }
-
-        } catch (HttpStatusCodeException e) {
-            logger.error("Error HTTP al llamar MS Inventario: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw e;
         } catch (Exception e) {
-            logger.error("Fallo al llamar MS Inventario: {}", e.getMessage(), e);
-            throw new IllegalStateException("No se pudo crear el contenedor en Inventario", e);
+            logger.error("Fallo al llamar MS Inventario: {}", e.getMessage());
+            throw new IllegalStateException("No se pudo crear el contenedor", e);
         }
 
-        // ---------------------------------------------------------
-        // 3. LLAMADA A MS VIAJES (Mapeo de Datos y Cálculo)
-        // ---------------------------------------------------------
+// 3. LLAMADA A MS VIAJES (Cálculo Estimado)
         CalculoEstimadoResponse estimacion = null;
-
         if (viajesServiceUrl != null) {
             RutaCalculoDTO rutaRequest = new RutaCalculoDTO();
 
-            // Mapeo de datos para el MS Viajes
-            rutaRequest.setVolumenContenedorM3(request.getVolumenM3());
+            // ✅ AGREGA ESTAS DOS LÍNEAS:
             rutaRequest.setPesoContenedorKg(request.getPesoKg());
+            rutaRequest.setVolumenContenedorM3(request.getVolumenM3());
 
+            // Configuración de la ruta (esto ya lo tenías bien)
             List<double[]> puntos = new ArrayList<>();
             puntos.add(new double[]{request.getOrigenLatitud(), request.getOrigenLongitud()});
             puntos.add(new double[]{request.getDestinoLatitud(), request.getDestinoLongitud()});
             rutaRequest.setPuntosRuta(puntos);
 
-            HttpEntity<RutaCalculoDTO> entityViajes = new HttpEntity<>(rutaRequest);
-
+            HttpEntity<RutaCalculoDTO> entityViajes = new HttpEntity<>(rutaRequest, headers);
             try {
-                logger.debug("Llamando a MS Viajes: {}/rutas/estimacion", viajesServiceUrl);
-                // El error 500 ocurre aquí si Viajes falla
                 estimacion = internalRestTemplate.exchange(
-                        viajesServiceUrl + "/rutas/estimacion",
+                        viajesServiceUrl + "/estimacion",
                         HttpMethod.POST,
                         entityViajes,
                         CalculoEstimadoResponse.class
                 ).getBody();
-
-                if (estimacion == null) {
-                    logger.warn("MS Viajes devolvió body null para la estimación, se usará 0.0");
-                    estimacion = new CalculoEstimadoResponse();
-                    estimacion.setCostoEstimado(0.0);
-                    estimacion.setTiempoEstimadoHoras(0L);
-                }
-
-            } catch (HttpStatusCodeException e) {
-                // Capturamos específicamente errores HTTP 4xx o 5xx del servicio hijo
-                logger.warn("⚠️ Error de servicio MS Viajes (Cálculo): status={}", e.getStatusCode());
-                logger.debug("Response body MS Viajes: {}", e.getResponseBodyAsString());
-                estimacion = new CalculoEstimadoResponse();
-                estimacion.setCostoEstimado(0.0);
-                estimacion.setTiempoEstimadoHoras(0L);
             } catch (Exception e) {
-                // Capturamos fallos de conexión (Connection Refused, etc.)
-                logger.warn("⚠️ Fallo de conexión MS Viajes: {}", e.getMessage());
-                estimacion = new CalculoEstimadoResponse();
-                estimacion.setCostoEstimado(0.0);
-                estimacion.setTiempoEstimadoHoras(0L);
+                logger.warn("⚠️ Fallo cálculo estimación: {}", e.getMessage());
             }
         }
 
-        // ---------------------------------------------------------
-        // 4. PERSISTENCIA FINAL DE LA SOLICITUD
-        // ---------------------------------------------------------
+        // 4. Guardar Solicitud Local (Estado: BORRADOR)
         Solicitud solicitud = new Solicitud();
         solicitud.setContenedorId(contenedorPersistido.getId());
         solicitud.setClienteKeycloakId(clienteKeycloakId);
-        solicitud.setEstado("PROGRAMADA");
+        solicitud.setEstado("BORRADOR"); // Nace como borrador
         solicitud.setFechaCreacion(LocalDateTime.now());
 
-        // Guardar estimación (o 0.0 si falló)
+        solicitud.setOrigenDireccion(request.getOrigenDireccion());
+        solicitud.setOrigenLatitud(request.getOrigenLatitud());
+        solicitud.setOrigenLongitud(request.getOrigenLongitud());
+        solicitud.setDestinoDireccion(request.getDestinoDireccion());
+        solicitud.setDestinoLatitud(request.getDestinoLatitud());
+        solicitud.setDestinoLongitud(request.getDestinoLongitud());
+
         if (estimacion != null) {
             solicitud.setCostoEstimado(estimacion.getCostoEstimado());
             solicitud.setTiempoEstimadoHoras(estimacion.getTiempoEstimadoHoras());
         }
 
-        // Mapeo de Ubicaciones
-        solicitud.setOrigenDireccion(request.getOrigenDireccion());
-        solicitud.setOrigenLatitud(request.getOrigenLatitud());
-        solicitud.setOrigenLongitud(request.getOrigenLongitud());
-
-        solicitud.setDestinoDireccion(request.getDestinoDireccion());
-        solicitud.setDestinoLatitud(request.getDestinoLatitud());
-        solicitud.setDestinoLongitud(request.getDestinoLongitud());
-
         return solicitudRepository.save(solicitud);
+    }
+
+    /**
+     * Paso 2: Confirmar solicitud a estado PROGRAMADA.
+     * Lo ejecuta el OPERADOR.
+     */
+    @Transactional
+    public Solicitud confirmarSolicitud(Long solicitudId, String token) {
+        // 1. Buscar solicitud
+        Solicitud solicitud = solicitudRepository.findById(solicitudId)
+                .orElseThrow(() -> new RuntimeException("Solicitud no encontrada"));
+
+        // 2. Validar estado previo
+        if (!"BORRADOR".equals(solicitud.getEstado())) {
+            throw new IllegalStateException("Solo se pueden confirmar solicitudes en estado BORRADOR");
+        }
+
+        // 3. Actualizar estado Local
+        solicitud.setEstado("PROGRAMADA");
+        Solicitud guardada = solicitudRepository.save(solicitud);
+
+        // 4. Actualizar estado Remoto (MS-INVENTARIO)
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(token);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, String> body = Collections.singletonMap("estado", "PROGRAMADA");
+            HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
+
+            internalRestTemplate.exchange(
+                    inventarioServiceUrl + "/" + solicitud.getContenedorId() + "/estado",
+                    HttpMethod.PATCH,
+                    entity,
+                    Void.class
+            );
+        } catch (Exception e) {
+            logger.error("Error al sincronizar estado con inventario: {}", e.getMessage());
+            // No hacemos rollback para no perder la confirmación local, pero queda registro del error
+        }
+
+        return guardada;
+    }
+
+    public List<Solicitud> obtenerSolicitudesCliente(String clienteKeycloakId) {
+        return solicitudRepository.findByClienteKeycloakId(clienteKeycloakId);
     }
 }

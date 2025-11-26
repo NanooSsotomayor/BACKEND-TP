@@ -4,12 +4,14 @@ import com.proyectoviajes.tarifams.model.TarifaBase;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 @Repository
 public interface TarifaBaseRepository extends JpaRepository<TarifaBase, Long> {
 
     /**
-     * Requisito: Encontrar la tarifa base aplicable para un volumen dado de contenedor.
+     * Busca la tarifa base cuyo rango de volumen incluya el volumen del contenedor solicitado.
+     * Ejemplo: Si el contenedor tiene 15m3, busca una tarifa con min <= 15 y max >= 15.
      */
-    TarifaBase findFirstByVolumenMinimoM3LessThanEqualAndVolumenMaximoM3GreaterThanEqual(
-            Double volumen, Double volumen2);
+    Optional<TarifaBase> findFirstByVolumenMinimoM3LessThanEqualAndVolumenMaximoM3GreaterThanEqual(Double volumen, Double volumenMismo);
 }

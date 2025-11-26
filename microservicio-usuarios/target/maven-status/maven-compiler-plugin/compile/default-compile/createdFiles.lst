@@ -1,0 +1,10 @@
+com\proyectoviajes\usuarioms\dto\ClienteDTO.class
+com\proyectoviajes\usuarioms\config\SecurityConfig.class
+com\proyectoviajes\usuarioms\UsuarioMsApplication.class
+com\proyectoviajes\usuarioms\repository\ClienteRepository.class
+com\proyectoviajes\usuarioms\controller\UsuarioController.class
+com\proyectoviajes\usuarioms\model\Transportista.class
+com\proyectoviajes\usuarioms\config\JwtAuthConverter.class
+com\proyectoviajes\usuarioms\service\ClienteService.class
+com\proyectoviajes\usuarioms\repository\TransportistaRepository.class
+com\proyectoviajes\usuarioms\model\Cliente.class
