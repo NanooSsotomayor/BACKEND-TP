@@ -82,7 +82,8 @@ services:
     image: osrm/osrm-backend:v5.22.0
     container_name: osrm
     # Comando para reprocesar y correr el servidor si los archivos binarios fallan.
-    command: sh -c "osrm-extract /data/uruguay-latest.osm.pbf -p /opt/car.lua && osrm-partition /data/uruguay-latest.osrm && osrm-customize /data/uruguay-latest.osrm && osrm-routed /data/uruguay-latest.osrm"
+    #command: sh -c "osrm-extract /data/uruguay-latest.osm.pbf -p /opt/car.lua && osrm-partition /data/uruguay-latest.osrm && osrm-customize /data/uruguay-latest.osrm && osrm-routed /data/uruguay-latest.osrm"
+    command: "osrm-routed --algorithm mld /data/uruguay-latest.osrm"
     ports:
       - "5000:5000"
     volumes:
@@ -103,7 +104,7 @@ services:
       - "8086:8086"
     environment:
       SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -126,7 +127,7 @@ services:
       - "8085:8085"
     environment:
       SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -150,7 +151,7 @@ services:
     environment:
       # CRÍTICO: Conexión a la BD (usando el nombre del servicio 'sqlserver')
       SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
     depends_on:
       sqlserver:
         condition: service_healthy
@@ -173,7 +174,7 @@ services:
       - "8083:8083"
     environment:
       # CRÍTICO: Usar nombres de servicio para llamadas inter-MS
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
       MICROSERVICES_TARIFAS_URL: http://ms-tarifas:8086/tarifas
       OSRM_BASE-URL: http://osrm:5000
     depends_on:
@@ -195,7 +196,7 @@ services:
       - "8084:8084"
     environment:
       SPRING_DATASOURCE_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=sistema_viajes_db;encrypt=false"
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
       # CRÍTICO: URLs de orquestación interna
       MICROSERVICES_INVENTARIO_URL: http://ms-inventario:8085/contenedores
       MICROSERVICES_USUARIOS_URL: http://ms-usuarios:8082/usuarios
@@ -229,7 +230,9 @@ services:
       - "8081:8081" # Puerto público para acceso externo
     environment:
       # Seguridad: Apunta a Keycloak por su nombre de servicio
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK-SET-URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs
+      # Forzar la propiedad mediante SPRING_APPLICATION_JSON para evitar valores empaquetados que apunten a localhost
+      SPRING_APPLICATION_JSON: '{"spring":{"security":{"oauth2":{"resourceserver":{"jwt":{"jwk-set-uri":"http://keycloak:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs"}}}}}}'
       SERVER_PORT: 8081
     depends_on:
       - keycloak
@@ -237,3 +240,4 @@ services:
       - ms-usuarios
     networks:
       - backend-network
+

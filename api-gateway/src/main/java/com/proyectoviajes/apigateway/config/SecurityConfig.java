@@ -1,5 +1,8 @@
 package com.proyectoviajes.apigateway.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -12,9 +15,11 @@ import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 @EnableWebFluxSecurity
 public class SecurityConfig {
 
-    // URL directa a las claves públicas de Keycloak (JWKS)
-    // Esto evita que Spring tenga que "descubrir" la configuración y falle con el issuer
-    private final String jwkSetUri = "http://localhost:8080/auth/realms/viajes-ms-realm/protocol/openid-connect/certs";
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
+
+    // Leer la URI JWKS desde propiedades (soporta perfiles local/docker)
+    @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}")
+    private String jwkSetUri;
 
     // Inyectamos el conversor de roles (ReactiveJwtAuthConverter) que creamos antes
     private final ReactiveJwtAuthConverter reactiveJwtAuthConverter;
@@ -39,10 +44,10 @@ public class SecurityConfig {
                 // 3. Configuración del Resource Server (OAuth2 JWT)
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> {
-                            // ✅ A: Usar el decodificador manual definido abajo (Soluciona error de inicio)
+                            // Usar el decodificador definido abajo, que lee jwkSetUri de propiedades
                             jwt.jwtDecoder(jwtDecoder());
 
-                            // ✅ B: Usar el conversor de roles (Para leer ROLE_CLIENTE, etc.)
+                            // Usar el conversor de roles (Para leer ROLE_CLIENTE, etc.)
                             jwt.jwtAuthenticationConverter(reactiveJwtAuthConverter);
                         })
                 );
@@ -52,11 +57,11 @@ public class SecurityConfig {
 
     /**
      * Define manualmente el Bean ReactiveJwtDecoder.
-     * Esto fuerza a Spring Security a usar la URL de certificados específica
-     * en lugar de intentar adivinarla desde el issuer-uri.
+     * Lee la propiedad jwkSetUri desde `application*.yml`.
      */
     @Bean
     public ReactiveJwtDecoder jwtDecoder() {
+        log.info("Creating NimbusReactiveJwtDecoder with jwkSetUri={}", jwkSetUri);
         return NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
     }
 }
