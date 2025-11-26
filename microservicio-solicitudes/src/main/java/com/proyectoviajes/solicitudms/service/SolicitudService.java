@@ -15,7 +15,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.client.HttpStatusCodeException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
@@ -96,20 +96,26 @@ public class SolicitudService {
             throw new IllegalStateException("No se pudo crear el contenedor", e);
         }
 
-// 3. LLAMADA A MS VIAJES (Cálculo Estimado)
+        // Seguridad: validar que el contenedor fue realmente persistido
+        if (contenedorPersistido == null || contenedorPersistido.getId() == null) {
+            logger.error("MS Inventario devolvió un contenedor nulo o sin id");
+            throw new IllegalStateException("Inventario no creó el contenedor correctamente");
+        }
+
+        // 3. LLAMADA A MS VIAJES (Cálculo Estimado)
         CalculoEstimadoResponse estimacion = null;
         if (viajesServiceUrl != null) {
             RutaCalculoDTO rutaRequest = new RutaCalculoDTO();
-
-            // ✅ AGREGA ESTAS DOS LÍNEAS:
-            rutaRequest.setPesoContenedorKg(request.getPesoKg());
-            rutaRequest.setVolumenContenedorM3(request.getVolumenM3());
 
             // Configuración de la ruta (esto ya lo tenías bien)
             List<double[]> puntos = new ArrayList<>();
             puntos.add(new double[]{request.getOrigenLatitud(), request.getOrigenLongitud()});
             puntos.add(new double[]{request.getDestinoLatitud(), request.getDestinoLongitud()});
             rutaRequest.setPuntosRuta(puntos);
+
+            // Asignar peso y volumen del contenedor para que ms-viajes / ms-tarifas puedan calcular tarifas
+            rutaRequest.setPesoContenedorKg(request.getPesoKg());
+            rutaRequest.setVolumenContenedorM3(request.getVolumenM3());
 
             HttpEntity<RutaCalculoDTO> entityViajes = new HttpEntity<>(rutaRequest, headers);
             try {
@@ -120,7 +126,11 @@ public class SolicitudService {
                         CalculoEstimadoResponse.class
                 ).getBody();
             } catch (Exception e) {
-                logger.warn("⚠️ Fallo cálculo estimación: {}", e.getMessage());
+                // Capturamos fallos de conexión
+                logger.warn("\u26a0\ufe0f Fallo de conexión MS Viajes: {}", e.getMessage());
+                estimacion = new CalculoEstimadoResponse();
+                estimacion.setCostoEstimado(0.0);
+                estimacion.setTiempoEstimadoHoras(0L);
             }
         }
 
